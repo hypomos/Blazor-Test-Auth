@@ -62,7 +62,9 @@
 
                                                             // Instead of using the default validation (validating against a single issuer value, as we do in line of business apps),
                                                             // we inject our own multitenant validation logic
-                                                            ValidateIssuer = false
+                                                            ValidateIssuer = false,
+                                                            
+                                                            SaveSigninToken = true
 
                                                             // If the app is meant to be accessed by entire organizations, add your issuer validation logic here.
                                                             // IssuerValidator = (issuer, securityToken, validationParameters) => {
