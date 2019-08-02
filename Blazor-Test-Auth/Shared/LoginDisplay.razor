@@ -1,4 +1,7 @@
-﻿<AuthorizeView>
+﻿@using Microsoft.AspNetCore.Components
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<AuthorizeView>
     <Authorized>
         Hello, @context.User.Identity.Name!
         <a href="AzureAD/Account/SignOut">Log out</a>
@@ -7,3 +10,16 @@
         <a href="AzureAD/Account/SignIn">Log in</a>
     </NotAuthorized>
 </AuthorizeView>
+
+@code {
+    protected override void OnInit()
+    {
+        DoSomething();
+    }
+
+    private async Task DoSomething()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+    }
+}

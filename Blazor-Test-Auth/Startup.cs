@@ -1,9 +1,7 @@
 namespace Blazor_Test_Auth
 {
     using System.Threading.Tasks;
-
     using Blazor_Test_Auth.Data;
-
     using Microsoft.AspNetCore.Authentication;
     using Microsoft.AspNetCore.Authentication.AzureAD.UI;
     using Microsoft.AspNetCore.Authentication.MicrosoftAccount;
@@ -46,56 +44,16 @@ namespace Blazor_Test_Auth
             });
 
             services.AddAuthentication(AzureADDefaults.AuthenticationScheme)
-                    .AddAzureAD(options => this.Configuration.Bind("AzureAd", options))
-                    .AddCookie();
-
+                .AddAzureAD(options => this.Configuration.Bind("AzureAd", options))
+                .AddCookie();
 
             services.Configure<OpenIdConnectOptions>(AzureADDefaults.OpenIdScheme,
-                                                     options =>
-                                                     {
-                                                         options.TokenValidationParameters =
-                                                             new TokenValidationParameters
-                                                                 {
-                                                                     // Instead of using the default validation (validating against a single issuer value, as we do in
-                                                                     // line of business apps), we inject our own multitenant validation logic
-                                                                     ValidateIssuer = false
-
-                                                                     // If the app is meant to be accessed by entire organizations, add your issuer validation logic here.
-                                                                     //IssuerValidator = (issuer, securityToken, validationParameters) => {
-                                                                     //    if (myIssuerValidationLogic(issuer)) return issuer;
-                                                                     //}
-                                                                 };
-
-                                                         options.Scope.Add("Files.ReadWrite.All");
-
-                                                         options.Events = new OpenIdConnectEvents
-                                                                              {
-                                                                                  OnTicketReceived = context =>
-                                                                                  {
-                                                                                      // If your authentication logic is based on users then add your logic here
-                                                                                      return Task.CompletedTask;
-                                                                                  },
-                                                                                  OnAuthenticationFailed = context =>
-                                                                                  {
-                                                                                      context
-                                                                                          .Response.Redirect("/Error");
-                                                                                      context
-                                                                                          .HandleResponse(); // Suppress the exception
-                                                                                      return Task.CompletedTask;
-                                                                                  },
-
-                                                                                  // If your application needs to authenticate single users, add your user validation below.
-                                                                                  OnTokenValidated = context =>
-                                                                                  {
-                                                                                      return Task.CompletedTask;
-                                                                                  }
-                                                                              };
-                                                     });
+                ConfigureOpenIdConnectOptions);
 
             services.AddControllersWithViews(options =>
             {
                 var policy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser()
-                                                             .Build();
+                    .Build();
 
                 options.Filters.Add(new AuthorizeFilter(policy));
             });
@@ -103,6 +61,34 @@ namespace Blazor_Test_Auth
             services.AddRazorPages();
             services.AddServerSideBlazor();
             services.AddSingleton<WeatherForecastService>();
+        }
+
+        private static void ConfigureOpenIdConnectOptions(OpenIdConnectOptions options)
+        {
+            options.TokenValidationParameters =
+                new TokenValidationParameters
+                {
+                    ValidateIssuer = false,
+                    NameClaimType = "name"
+                };
+
+            options.Events = new OpenIdConnectEvents
+            {
+                OnTicketReceived = context =>
+                {
+                    // If your authentication logic is based on users then add your logic here
+                    return Task.CompletedTask;
+                },
+                OnAuthenticationFailed = context =>
+                {
+                    context.Response.Redirect("/Error");
+                    context.HandleResponse(); // Suppress the exception
+                    return Task.CompletedTask;
+                },
+
+                // If your application needs to authenticate single users, add your user validation below.
+                OnTokenValidated = context => { return Task.CompletedTask; }
+            };
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
