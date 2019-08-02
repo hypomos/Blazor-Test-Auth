@@ -12,14 +12,14 @@
 </AuthorizeView>
 
 @code {
-    protected override void OnInit()
-    {
-        DoSomething();
-    }
+protected override void OnInit()
+{
+DoSomething();
+}
 
-    private async Task DoSomething()
-    {
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-    }
+private async Task DoSomething()
+{
+var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+var user = authState.User;
+}
 }

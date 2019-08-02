@@ -1,10 +1,13 @@
-namespace Blazor_Test_Auth
+namespace Hypomos.Blazor.AuthTests
 {
     using System.Threading.Tasks;
-    using Blazor_Test_Auth.Data;
-    using Microsoft.AspNetCore.Authentication;
+
+    using Hypomos.Blazor.AuthTests.Data;
+    using Hypomos.Blazor.AuthTests.Extensions;
+    using Hypomos.Blazor.AuthTests.Helpers;
+
     using Microsoft.AspNetCore.Authentication.AzureAD.UI;
-    using Microsoft.AspNetCore.Authentication.MicrosoftAccount;
+    using Microsoft.AspNetCore.Authentication.Cookies;
     using Microsoft.AspNetCore.Authentication.OpenIdConnect;
     using Microsoft.AspNetCore.Authorization;
     using Microsoft.AspNetCore.Builder;
@@ -16,80 +19,25 @@ namespace Blazor_Test_Auth
     using Microsoft.Extensions.Hosting;
     using Microsoft.IdentityModel.Tokens;
 
+    using Serilog;
+
     // all: https://github.com/Azure-Samples/active-directory-aspnetcore-webapp-openidconnect-v2/
     // read: https://github.com/Azure-Samples/active-directory-aspnetcore-webapp-openidconnect-v2/tree/master/1-WebApp-OIDC
     // sign in: https://github.com/Azure-Samples/active-directory-aspnetcore-webapp-openidconnect-v2/tree/master/1-WebApp-OIDC/1-3-AnyOrgOrPersonal
     // sign out: https://github.com/Azure-Samples/active-directory-aspnetcore-webapp-openidconnect-v2/tree/master/1-WebApp-OIDC/1-6-SignOut
 
     // scopes: https://github.com/microsoftgraph/aspnetcore-connect-sample/tree/master/MicrosoftGraphAspNetCoreConnectSample
-
     public class Startup
     {
+        public const string ObjectIdentifierType = "http://schemas.microsoft.com/identity/claims/objectidentifier";
+        public const string TenantIdType = "http://schemas.microsoft.com/identity/claims/tenantid";
+
         public Startup(IConfiguration configuration)
         {
             this.Configuration = configuration;
         }
 
         public IConfiguration Configuration { get; }
-
-        // This method gets called by the runtime. Use this method to add services to the container.
-        // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
-        public void ConfigureServices(IServiceCollection services)
-        {
-            services.Configure<CookiePolicyOptions>(options =>
-            {
-                // This lambda determines whether user consent for non-essential cookies is needed for a given request.
-                options.CheckConsentNeeded = context => true;
-                options.MinimumSameSitePolicy = SameSiteMode.None;
-            });
-
-            services.AddAuthentication(AzureADDefaults.AuthenticationScheme)
-                .AddAzureAD(options => this.Configuration.Bind("AzureAd", options))
-                .AddCookie();
-
-            services.Configure<OpenIdConnectOptions>(AzureADDefaults.OpenIdScheme,
-                ConfigureOpenIdConnectOptions);
-
-            services.AddControllersWithViews(options =>
-            {
-                var policy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser()
-                    .Build();
-
-                options.Filters.Add(new AuthorizeFilter(policy));
-            });
-
-            services.AddRazorPages();
-            services.AddServerSideBlazor();
-            services.AddSingleton<WeatherForecastService>();
-        }
-
-        private static void ConfigureOpenIdConnectOptions(OpenIdConnectOptions options)
-        {
-            options.TokenValidationParameters =
-                new TokenValidationParameters
-                {
-                    ValidateIssuer = false,
-                    NameClaimType = "name"
-                };
-
-            options.Events = new OpenIdConnectEvents
-            {
-                OnTicketReceived = context =>
-                {
-                    // If your authentication logic is based on users then add your logic here
-                    return Task.CompletedTask;
-                },
-                OnAuthenticationFailed = context =>
-                {
-                    context.Response.Redirect("/Error");
-                    context.HandleResponse(); // Suppress the exception
-                    return Task.CompletedTask;
-                },
-
-                // If your application needs to authenticate single users, add your user validation below.
-                OnTokenValidated = context => { return Task.CompletedTask; }
-            };
-        }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -101,8 +49,6 @@ namespace Blazor_Test_Auth
             else
             {
                 app.UseExceptionHandler("/Home/Error");
-
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
                 app.UseHsts();
             }
 
@@ -111,16 +57,81 @@ namespace Blazor_Test_Auth
 
             app.UseRouting();
 
-            var microsoftAccountHandler = app.ApplicationServices.GetService<MicrosoftAccountHandler>();
             app.UseAuthentication();
             app.UseAuthorization();
 
-            app.UseEndpoints(endpoints =>
-            {
-                endpoints.MapControllers();
-                endpoints.MapBlazorHub();
-                endpoints.MapFallbackToPage("/_Host");
-            });
+            app.UseEndpoints(
+                endpoints =>
+                    {
+                        endpoints.MapControllers();
+                        endpoints.MapBlazorHub();
+                        endpoints.MapFallbackToPage("/_Host");
+                    });
+        }
+
+        // This method gets called by the runtime. Use this method to add services to the container.
+        // For more information on how to configure your application, visit https://go.microsoft.com/fwlink/?LinkID=398940
+        public void ConfigureServices(IServiceCollection services)
+        {
+            services.AddSingleton<IGraphAuthProvider, GraphAuthProvider>();
+            services.AddTransient<IGraphSdkHelper, GraphSdkHelper>();
+
+            services.Configure<CookiePolicyOptions>(
+                options =>
+                    {
+                        // This lambda determines whether user consent for non-essential cookies is needed for a given request.
+                        options.CheckConsentNeeded = context => true;
+                        options.MinimumSameSitePolicy = SameSiteMode.None;
+                    });
+
+            services
+                .AddAuthentication(
+                sharedOptions =>
+                    {
+                        sharedOptions.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                        sharedOptions.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+                        sharedOptions.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
+                    })
+                .AddAzureAd(options => this.Configuration.Bind("AzureAd", options))
+                .AddCookie();
+
+            //services.Configure<OpenIdConnectOptions>(AzureADDefaults.OpenIdScheme, ConfigureOpenIdConnectOptions);
+
+            services.AddControllersWithViews(
+                options =>
+                    {
+                        var policy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
+
+                        options.Filters.Add(new AuthorizeFilter(policy));
+                    });
+
+            services.AddRazorPages();
+            services.AddServerSideBlazor();
+            services.AddSingleton<WeatherForecastService>();
+        }
+
+        private static void ConfigureOpenIdConnectOptions(OpenIdConnectOptions options)
+        {
+            options.TokenValidationParameters =
+                new TokenValidationParameters { ValidateIssuer = false, NameClaimType = "name" };
+
+            options.Events = new OpenIdConnectEvents
+                                 {
+                                     OnTicketReceived = context =>
+                                         {
+                                             // If your authentication logic is based on users then add your logic here
+                                             return Task.CompletedTask;
+                                         },
+                                     OnAuthenticationFailed = context =>
+                                         {
+                                             context.Response.Redirect("/Error");
+                                             context.HandleResponse(); // Suppress the exception
+                                             return Task.CompletedTask;
+                                         },
+
+                                     // If your application needs to authenticate single users, add your user validation below.
+                                     OnTokenValidated = context => { return Task.CompletedTask; }
+                                 };
         }
     }
 }
